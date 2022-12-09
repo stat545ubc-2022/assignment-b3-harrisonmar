@@ -19,9 +19,8 @@ title <- tags$a(
 # order in which arguments are passed here defines in what order they will appear spatially
 # on the webpage
 ui <- fluidPage(
-  
   # adjusting color aesthetic of the page and applying title created with hyperlink and image
-  dashboardPage(skin = "green",
+  dashboardPage(ski = "black",
      dashboardHeader(title = h4(title),
                      titleWidth = 250
     )
@@ -40,10 +39,8 @@ ui <- fluidPage(
   # populating the tab/each menu item with text and respective content
       tabItems(
         tabItem(tabName = "dashboard",
-          h1(strong("Welcome to the BC Liquor Data Visualization Dashboard!", style = "font-si40pt"))
-          ,
-          br()
-          ,
+          h1(strong("Welcome to the BC Liquor Data Visualization Dashboard!", style = "font-si40pt")),
+          br(),
           tags$div("This Shiny Dashboard has been created as an assignment for UBC's STAT 545B course. Students are tasked with building and deploying a Shiny App where they must demonstrate their ability to 
             display clear data findings, along with a clean and useful webpage UI. This page has been created using ",
                    tags$a(href="https://shiny.rstudio.com/",
@@ -52,14 +49,10 @@ ui <- fluidPage(
                    tags$a(href="hhttps://rstudio.github.io/shinydashboard/",
                           "shiny dashboard"),
                    "."
-                   )
-          ,
-          br()
-          ,
-          p("Use the tabs on the left hand side of the page for navigation. Each tab accesses a different form of visualizaiton.")
-          ,
-          br()
-          ,
+                   ),
+          br(),
+          p("Use the tabs on the left hand side of the page for navigation. Each tab accesses a different form of visualizaiton."),
+          br(),
           a(href = "https://github.com/daattali/shiny-server/tree/master/bcl", 
            "Link to Original Dataset")
       )
@@ -79,24 +72,32 @@ ui <- fluidPage(
                   title = "Controls",
                   sliderInput("priceInput", "Price", 0, 100,
                               value = c(25,40), pre = "$"),
-                  radioButtons("typeInput", "Type", 
-                               choices = c("BEER", "REFRESHMENT", "SPIRITS", "WINE")),
+                  # changed radio buttons to be checkboxes, allowing users to search for multiple types of 
+                  # alcohol at once
+                  checkboxGroupInput("typeInput", "Type", 
+                               choices = c("BEER", "REFRESHMENT", "SPIRITS", "WINE"),
+                               selected = "BEER"),
                   # adding select bar widget such that users can choose to further filter histogram output by country
-                  selectInput("v_select", label = "Country", choices = unique(bcl$Country), selected = "Canada"))
+                  selectInput("countryInput", label = "Country", choices = unique(bcl$Country), selected = "Canada")),
+                # adding text output that tells user how many options fit the criteria of their selected parameters   
+                box(
+                  textOutput("text"))
                 )
               )
       ,
       tabItem(tabName = "table",
               h2(strong("BC Liquor Data : Data Table")),
               br(),
-              p("Sort columns in ascending or descending order(alphabetically or numerically depending on column type) or
+              p("Sort columns in ascending or descending order (alphabetically or numerically depending on column type) or
                 search by keyword using the search bar located at the top right of the data table."),
               br(),
               # output entire data table to a new tab on the dashboard using the "DT" library, includes the ability to order
               # columns in ascending or descending order numerically or alphabetically (depending on column type) and search
               # by keyword 
               fluidRow(
-                  DTOutput("mytable1")
+                  DTOutput("mytable1"),
+                  downloadButton("downloadData", 
+                               "Download Results in CSV Format")
                )
               )
         
@@ -108,19 +109,18 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
-  # must include reactive if the object must change with user inputs
   filtered_data <-  
     reactive(bcl %>% filter(Price > input$priceInput[1] &
                                           Price < input$priceInput[2] &
-                                          Type == input$typeInput))
-
+                                          Type %in% c(input$typeInput) &
+                                          Country == input$countryInput))
   
   # must now add round brackets to whatever reactive variable is in the code to access
   output$alcohol_hist <- 
     renderPlot({
       filtered_data() %>%
       # adding additional filter to go along with the select bar widget
-      filter(Country == input$v_select) %>%
+      filter(Country == input$countryInput) %>%
       ggplot(aes(Alcohol_Content)) + 
         geom_histogram(color = "darkblue", fill = "lightblue") +
         ggtitle("Count vs Alcohol Content") +
@@ -129,18 +129,28 @@ server <- function(input, output) {
         ylab("Count")
       })
   
+# creating output text that displays the number of options produced after filtering data
+  output$text <- renderText({
+    paste("We have found", nrow(filtered_data()), "options for you!")
+  })
   
-  output$data_table <- 
-    renderTable({
-      filtered_data()
-      })
-  
-  # new full data table to be displayed using the "DT" library
+# new full data table to be displayed using the "DT" library
   output$mytable1 <-
     DT::renderDataTable({
       bcl
     })
-    
+
+  
+# creating button for users to download the displayed the filtered table as a csv file 
+  output$downloadData <- downloadHandler(
+    filename = function(){
+      paste("bcl-data.csv", sep="")
+    },
+    content = function(file) {
+      s = input$mytable1_rows_all
+      write.csv(bcl[s, , drop=FALSE], file)
+    }
+  )
 }
 
 shinyApp(ui = ui, server = server)
